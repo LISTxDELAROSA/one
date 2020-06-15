@@ -1,0 +1,116 @@
+#include <tbb/task_scheduler_init.h>
+#include <tbb/parallel_for.h>
+#include <tbb/blocked_range.h>
+#include <tbb/tick_count.h>
+#include <limits>
+#include <cstddef>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <time.h>
+#include <chrono>
+#include <math.h>
+using namespace tbb;
+using namespace std;
+class Timer
+{
+public:
+	void Start()
+	{
+		start = std::chrono::high_resolution_clock::now();
+	}
+	void Stop()
+	{
+		end = std::chrono::high_resolution_clock::now();
+	}
+	double elapsedMilliseconds()
+	{
+		duration = end - start;
+		return duration.count();
+	}
+private:
+	std::chrono::time_point<std::chrono::steady_clock> start, end;
+	std::chrono::duration<float, milli> duration;
+};
+struct Point {
+	double x, y;
+};
+class TriangleService
+{
+public:
+	TriangleService(std::vector<Point> points, std::vector<Point> reversed) : points_(points.data()), reversed_(reversed.data()) {}
+
+	Point* operator()(const blocked_range<size_t > &r) const
+	{
+		for (size_t i = r.begin(); i < r.end(); i++)
+		{
+			reversed_[i] = T(points_[i]);
+		}
+		return reversed_;
+	}
+	
+	Point T(Point X)const
+	{
+		Point X1;
+		X1.x = -X.x;
+		X1.y = X.y;
+		return X1;
+	}
+
+private:
+	Point *const points_;
+	Point *const reversed_;
+};
+
+Point T(Point X)
+{
+	Point X1;
+	X1.x = -X.x;
+	X1.y = X.y;
+	return X1;
+}
+
+void printPoints(int num, std::vector<Point> &pointsReversed);
+
+int main()
+{
+	vector<Point> points(3);
+	vector<Point> pointsReversed(3);
+	Timer time;
+	int num = 3;
+	cout << "Enter triangle vertices:\n";
+	for (int i = 0; i < num; ++i) {
+		cout << "X" << i + 1 << " : ";
+		cin >> points[i].x;
+		cout << "Y" << i + 1 << " : ";
+		cin >> points[i].y;
+	}
+
+	time.Start();
+	for (int i = 0; i < num; i++)
+	{
+		pointsReversed[i] = T(points[i]);
+	}
+	time.Stop();
+	cout << "\nMono-thread time: " << time.elapsedMilliseconds() << endl;
+	time.Start();
+	cout << "New triangle vertices: " << endl;
+	printPoints(num, pointsReversed);
+
+
+	time.Start();
+	task_scheduler_init init(3);
+	parallel_for(blocked_range<size_t>(0, num), TriangleService(points, pointsReversed), auto_partitioner());
+	time.Stop();
+	printPoints(num, pointsReversed);
+	cout << "\nParalel-thread time: " << time.elapsedMilliseconds() << endl;
+
+}
+
+void printPoints(int num, std::vector<Point> &pointsReversed)
+{
+	for (int i = 0; i < num; i++)
+	{
+		cout << "X" << i + 1 << " : " << pointsReversed[i].x << endl << "Y" << i + 1 << " : " << pointsReversed[i].y << endl;
+	}
+}
